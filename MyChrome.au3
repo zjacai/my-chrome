@@ -3,13 +3,22 @@
 #AutoIt3Wrapper_Icon=Icon_1.ico
 #AutoIt3Wrapper_Compile_Both=y
 #AutoIt3Wrapper_UseX64=y
-#AutoIt3Wrapper_Res_Description=Google Chrome Portable
-#AutoIt3Wrapper_Res_Fileversion=3.8.1.0
+#AutoIt3Wrapper_Res_Description=Google Chrome Portable mod by acai
+#AutoIt3Wrapper_Res_Fileversion=3.9.2.0
+#AutoIt3Wrapper_Res_ProductVersion=3.9.2
+#AutoIt3Wrapper_Res_ProductName=MyChrome
 #AutoIt3Wrapper_Res_LegalCopyright=甲壳虫<jdchenjian@gmail.com>
 #AutoIt3Wrapper_Res_Language=1033
+#AutoIt3Wrapper_Res_Compatibility=Vista,Windows7,Windows8,Windows81,Windows10
 #AutoIt3Wrapper_AU3Check_Parameters=-q
 #AutoIt3Wrapper_Run_Au3Stripper=y
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
+#pragma compile(Icon, Icon_1.ico)
+#pragma compile(FileVersion, 3.9.2.0)
+#pragma compile(ProductVersion, 3.9.2)
+#pragma compile(ProductName, MyChrome)
+#pragma compile(FileDescription, Google Chrome Portable)
+#pragma compile(LegalCopyright, 甲壳虫<jdchenjian@gmail.com>)
 
 #include <Date.au3>
 #include <Constants.au3>
@@ -31,14 +40,18 @@
 #include "AppUserModelId.au3"
 #include "AppMute.au3"
 
-Global $WinVersion = _WinAPI_GetVersion()
-Global Const $AppVersion = "3.8.1" ; MyChrome version
+Global $WinVersion = GetRealWinVersion()
+Global Const $AppVersion = "3.9.2" ; MyChrome mod by acai version
 Global $AppName = StringRegExpReplace(@ScriptName, "\.[^.]*$", "")
 Global $inifile = @ScriptDir & "\" & $AppName & ".ini"
+If Not FileExists($inifile) And FileExists(@ScriptDir & "\MyChrome.ini") Then
+	$inifile = @ScriptDir & "\MyChrome.ini"
+EndIf
 Global $Language = IniRead($inifile, "Settings", "Language", "Auto")
 Global $LangFile = LangCheck()
 Global $ProxyType, $ProxySever, $ProxyPort
-Global $UserAgent = "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 Chrome/56.0.2924.87 Safari/537.36"
+Global $UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+Global $MyChromeAppId, $MyChromeClientName, $MyChromeProgid
 
 #include "SimpleMultiThreading.au3"
 #include "IAccessible.au3"
@@ -59,7 +72,7 @@ Global $TaskBarDir = @AppDataDir & "\Microsoft\Internet Explorer\Quick Launch\Us
 Global $TaskBarLastChange
 Global $aExApp, $aExApp2, $aExAppPID[2]
 Global $dicKeys, $Bosskey, $BosskeyM, $Hide2Tray
-Global $KeepLastTab
+Global $KeepLastTab, $ContextMenu, $StartWithWindows
 Global $MouseClick2CloseTab ; LDClick|RClick + MClick
 Global $Mouse2SwitchTab
 Global $CancelAppUpdate
@@ -73,6 +86,7 @@ Global $hParams, $hDownloadThreads, $hProxyType, $hProxySever, $hProxyPort
 Global $hRunInBackground, $hLanguage, $hExApp, $hExAppAutoExit, $hExApp2
 Global $hBosskey, $hBosskeyM, $hBosskeyM1, $hBosskeyM2, $hWndProc, $hHide2Tray
 Global $hKeepLastTab, $hDoubleClick2CloseTab, $hRightClick2CloseTab, $hMouse2SwitchTab
+Global $hSetDefaultBrowser, $hContextMenu, $hStartWithWindows
 
 Global $ChromeFileVersion, $ChromeLastChange, $LatestChromeVer, $LatestChromeUrls, $SelectedUrl
 Global $DefaultChromeDir, $DefaultChromeVer, $DefaultUserDataDir
@@ -117,8 +131,8 @@ Else ; 64-bit Autoit
 	$HKLM_Software_64 = "HKLM64\SOFTWARE"
 EndIf
 
-Global $aFileAsso[6] = [".htm", ".html", ".shtml", ".webp", ".xht", ".xhtml"]
-Global $aUrlAsso[13] = ["ftp", "http", "https", "irc", "mailto", "mms", "news", "nntp", "sms", "smsto", "tel", "urn", "webcal"]
+Global $aFileAsso[7] = [".htm", ".html", ".shtml", ".webp", ".xht", ".xhtml", ".pdf"]
+Global $aUrlAsso[14] = ["ftp", "http", "https", "irc", "mailto", "mms", "news", "nntp", "sms", "smsto", "tel", "urn", "webcal", "microsoft-edge"]
 
 FileChangeDir(@ScriptDir)
 
@@ -126,6 +140,9 @@ Global $EnvID = RegRead('HKLM64\SOFTWARE\Microsoft\Cryptography', 'MachineGuid')
 $EnvID &= RegRead("HKLM64\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "InstallDate")
 $EnvID &= DriveGetSerial(@HomeDrive & "\")
 $EnvID = StringTrimLeft(_WinAPI_HashString($EnvID, 0, 16), 2)
+$MyChromeAppId = "MyChrome." & StringTrimLeft(_WinAPI_HashString(@ScriptFullPath, 0, 16), 2)
+$MyChromeClientName = $MyChromeAppId
+$MyChromeProgid = "MyChromeHTML." & StringTrimLeft(_WinAPI_HashString(@ScriptFullPath, 0, 16), 2)
 
 If Not FileExists($inifile) Then
 	$FirstRun = 1
@@ -160,6 +177,8 @@ If Not FileExists($inifile) Then
 	IniWrite($inifile, "Settings", "MouseClick2CloseTab", $AU3_LDCLICK)
 	IniWrite($inifile, "Settings", "Mouse2SwitchTab", $AU3_WHEELDOWN & "|" & $AU3_WHEELUP)
 	IniWrite($inifile, "Settings", "KeepLastTab", 0)
+	IniWrite($inifile, "Settings", "ContextMenu", 1)
+	IniWrite($inifile, "Settings", "StartWithWindows", 0)
 EndIf
 
 ; read ini info
@@ -195,11 +214,12 @@ $Hide2Tray = IniRead($inifile, "Settings", "Hide2Tray", 1) * 1
 $MouseClick2CloseTab = IniRead($inifile, "Settings", "MouseClick2CloseTab", $AU3_LDCLICK)
 $Mouse2SwitchTab = IniRead($inifile, "Settings", "Mouse2SwitchTab", $AU3_WHEELDOWN & "|" & $AU3_WHEELUP)
 $KeepLastTab = IniRead($inifile, "Settings", "KeepLastTab", 0) * 1
+$ContextMenu = IniRead($inifile, "Settings", "ContextMenu", 1) * 1
+$StartWithWindows = IniRead($inifile, "Settings", "StartWithWindows", 0) * 1
 
 
 #Region ========= Deal with old MyChrome =========
 If $AppVersion <> IniRead($inifile, "Settings", "AppVersion", "") Then
-	$FirstRun = 1
 	IniWrite($inifile, "Settings", "AppVersion", $AppVersion)
 EndIf
 #EndRegion ========= Deal with old MyChrome =========
@@ -208,7 +228,9 @@ Opt("ExpandEnvStrings", 1)
 EnvSet("APP", @ScriptDir)
 ; Show settings GUI if The first cmdline parameter is "-set"，
 ; or first run, Chrome.exe or userdata not exists
-If ($cmdline[0] = 1 And $cmdline[1] = "-set") Or $FirstRun Or Not FileExists($ChromePath) Or Not FileExists($UserDataDir) Then
+Local $ChromePathCheck = FullPath($ChromePath)
+Local $UserDataDirCheck = FullPath($UserDataDir)
+If ($cmdline[0] = 1 And $cmdline[1] = "-set") Or $FirstRun Or Not FileExists($ChromePathCheck) Or Not FileExists($UserDataDirCheck) Then
 	CreateSettingsShortcut(@ScriptDir & "\" & $AppName & ".vbs")
 	Settings()
 EndIf
@@ -217,8 +239,13 @@ $ChromePath = FullPath($ChromePath)
 SplitPath($ChromePath, $ChromeDir, $ChromeExe)
 $UserDataDir = FullPath($UserDataDir)
 
-If IsAdmin() And $cmdline[0] = 1 And $cmdline[1] = "-SetDefaultGlobal" Then
+If $cmdline[0] >= 1 And $cmdline[1] = "-SetDefaultGlobal" Then
+	RegisterPortableBrowser($ChromePath)
 	CheckDefaultBrowser($ChromePath)
+	Exit
+EndIf
+If $cmdline[0] >= 1 And $cmdline[1] = "-SetDefaultBrowser" Then
+	SetAsDefaultBrowser($ChromePath, True)
 	Exit
 EndIf
 
@@ -236,8 +263,13 @@ For $i = 1 To $cmdline[0]
 	EndIf
 Next
 
-; $PortableParam = '--no-default-browser-check'
 $PortableParam = '--user-data-dir="' & $UserDataDir & '"'
+If Not StringInStr($Params, "--no-first-run") Then
+	$PortableParam &= ' --no-first-run'
+EndIf
+If Not StringInStr($Params, "--no-default-browser-check") Then
+	$PortableParam &= ' --no-default-browser-check'
+EndIf
 If $CacheDir <> "" Then
 	$CacheDir = FullPath($CacheDir)
 	$PortableParam &= ' --disk-cache-dir="' & $CacheDir & '"'
@@ -290,19 +322,25 @@ If $ExApp <> "" Then
 EndIf
 
 If $CheckDefaultBrowser Then
+	RegisterPortableBrowser($ChromePath)
 	CheckDefaultBrowser($ChromePath)
 EndIf
 
 WinWait("[REGEXPCLASS:(?i)Chrome; REGEXPTITLE:\S+]", "", 10) ; wait fo Chrome / Chromium window
 For $i = 1 To 5
 	$hWnd_Browser = GethWndbyPID($AppPID_Browser, "Chrome", "\S+")
-	If $hWnd_Browser Then ExitLoop
+	If $hWnd_Browser Then
+		_WindowAppId($hWnd_Browser, $MyChromeAppId)
+		ExitLoop
+	EndIf
 	Sleep(2000)
 Next
 
-Global $AppUserModelId
+Global $AppUserModelId = $MyChromeAppId
+If $hWnd_Browser Then
+	_WindowAppId($hWnd_Browser, $MyChromeAppId)
+EndIf
 If FileExists($TaskBarDir) Then ; win 7+
-	$AppUserModelId = _WindowAppId($hWnd_Browser)
 	CheckPinnedPrograms($ChromePath)
 EndIf
 
@@ -363,6 +401,9 @@ While 1
 		EndIf
 		$AppIsRunning = 1
 		$hWnd_Browser = GethWndbyPID($AppPID_Browser, "Chrome", "\S+")
+		If $hWnd_Browser Then
+			_WindowAppId($hWnd_Browser, $MyChromeAppId)
+		EndIf
 	EndIf
 
 	If $TaskBarLastChange Then
@@ -419,6 +460,17 @@ If 0 Then
 	get_latest_chrome_ver("Stable")
 	get_latest_chrome_ver_sina("Stable")
 	download_chrome("", "")
+	RegisterPortableBrowser("")
+	SetAsDefaultBrowser("")
+	LaunchAssociationUI("")
+	GUI_SetDefaultBrowser()
+	GetRealWinVersion()
+	EnableWinHttpTls12(0)
+	IsMyChromeDefaultBrowser()
+	CreateMyChromeStartMenuShortcut("")
+	ApplyDarkTitleBar(0)
+	RegisterContextMenu("", 0)
+	SetStartWithWindows(0)
 EndIf
 Exit
 
@@ -526,13 +578,23 @@ Func HookMouse()
 	$hHookDll = DllOpen($hookdll)
 	If $hHookDll = -1 Then Return
 
-	OnAutoItExitRegister("UnhookMouse")
 	$hHookLib = _WinAPI_LoadLibrary($hookdll)
 	$mouseHOOKproc = _WinAPI_GetProcAddress($hHookLib, "MouseProc")
-	If Not $mouseHOOKproc Then Return
+	If Not $mouseHOOKproc Then
+		_WinAPI_FreeLibrary($hHookLib)
+		DllClose($hHookDll)
+		$hHookDll = -1
+		Return
+	EndIf
 	$iThread = _WinAPI_GetWindowThreadProcessId($hWnd_Browser, $iPID)
-	;If Not $iThread Then Return
 	$hMouseHook = _WinAPI_SetWindowsHookEx($WH_MOUSE, $mouseHOOKproc, $hHookLib, $iThread)
+	If Not $hMouseHook Then
+		_WinAPI_FreeLibrary($hHookLib)
+		DllClose($hHookDll)
+		$hHookDll = -1
+		Return
+	EndIf
+	OnAutoItExitRegister("UnhookMouse")
 
 	Local $events = "|" & $BosskeyM & "|" & $MouseClick2CloseTab
 	If $KeepLastTab Then
@@ -816,6 +878,7 @@ Func GetIEProxy(ByRef $Sever, ByRef $Port)
 			DllStructSetData($WINHTTP_AUTOPROXY_OPTIONS, "lpszAutoConfigUrl", DllStructGetPtr($tPacAddress))
 
 			Local $hOpen = _WinHttpOpen()
+			EnableWinHttpTls12($hOpen)
 			$url = "https://www.google.com"
 			Local $aCall = DllCall($hWINHTTPDLL__WINHTTP, "bool", "WinHttpGetProxyForUrl", _
 					"handle", $hOpen, _
@@ -952,6 +1015,14 @@ Func CheckPinnedPrograms($browser_path)
 	EndIf
 
 	$TaskBarLastChange = $ftime
+	If Not $hWnd_Browser Then
+		$hWnd_Browser = GethWndbyPID($AppPID_Browser, "Chrome", "\S+")
+	EndIf
+	If $hWnd_Browser Then
+		_WindowAppId($hWnd_Browser, $MyChromeAppId)
+	EndIf
+	$AppUserModelId = $MyChromeAppId
+
 	Local $search = FileFindFirstFile($TaskBarDir & "\*.lnk")
 	If $search = -1 Then Return
 	Local $file, $ShellObj, $objShortcut, $shortcut_appid
@@ -965,28 +1036,14 @@ Func CheckPinnedPrograms($browser_path)
 			If $path == $browser_path Or $path == @ScriptFullPath Then
 				If $path == $browser_path Then
 					$objShortcut.TargetPath = @ScriptFullPath
+					$objShortcut.WorkingDirectory = @ScriptDir
+					$objShortcut.IconLocation = $browser_path & ",0"
 					$objShortcut.Save
 					$TaskBarLastChange = FileGetTime($TaskBarDir, 0, 1)
 				EndIf
 				$shortcut_appid = _ShortcutAppId($file)
-
-				If Not $AppUserModelId Then
-					If Not $hWnd_Browser Then
-						Sleep(3000)
-						$hWnd_Browser = GethWndbyPID($AppPID_Browser, "Chrome", "\S+")
-					EndIf
-					$AppUserModelId = _WindowAppId($hWnd_Browser)
-					If Not $AppUserModelId Then
-						If $shortcut_appid Then
-							$AppUserModelId = $shortcut_appid
-						Else ; if no window appid found,set an id for the window
-							$AppUserModelId = "MyChrome." & StringTrimLeft(_WinAPI_HashString(@ScriptFullPath, 0, 16), 2)
-						EndIf
-						_WindowAppId($hWnd_Browser, $AppUserModelId)
-					EndIf
-				EndIf
-				If $shortcut_appid <> $AppUserModelId Then
-					_ShortcutAppId($file, $AppUserModelId)
+				If $shortcut_appid <> $MyChromeAppId Then
+					_ShortcutAppId($file, $MyChromeAppId)
 					$TaskBarLastChange = FileGetTime($TaskBarDir, 0, 1)
 				EndIf
 				ExitLoop
@@ -1007,31 +1064,87 @@ Func CreateSettingsShortcut($fname)
 EndFunc   ;==>CreateSettingsShortcut
 
 
+Func RegisterPortableBrowser($BrowserPath)
+	Local $cmd = '"' & @ScriptFullPath & '" -- "%1"'
+	Local $icon = $BrowserPath & ",0"
+	If Not FileExists($BrowserPath) Then $icon = @ScriptFullPath & ",0"
+	Local $desc = "MyChrome Portable"
+	Local $client = $MyChromeClientName
+	Local $progid = $MyChromeProgid
+	Local $RegWriteError = 0
+
+	$RegWriteError += Not RegWrite("HKCU\SOFTWARE\Classes\" & $progid, "", "REG_SZ", $desc)
+	RegWrite("HKCU\SOFTWARE\Classes\" & $progid, "AppUserModelId", "REG_SZ", $MyChromeAppId)
+	RegWrite("HKCU\SOFTWARE\Classes\" & $progid & "\DefaultIcon", "", "REG_SZ", $icon)
+	RegWrite("HKCU\SOFTWARE\Classes\" & $progid & "\shell\open", "", "REG_SZ", "")
+	RegWrite("HKCU\SOFTWARE\Classes\" & $progid & "\shell\open\command", "", "REG_SZ", $cmd)
+	RegWrite("HKCU\SOFTWARE\Classes\" & $progid & "\shell\open\ddeexec", "", "REG_SZ", "")
+	RegDelete("HKCU\SOFTWARE\Classes\" & $progid & "\shell\open\command", "DelegateExecute")
+	RegWrite("HKCU\SOFTWARE\Classes\" & $progid, "FriendlyTypeName", "REG_SZ", $desc)
+
+	Local $i
+	For $i = 0 To UBound($aFileAsso) - 1
+		RegWrite("HKCU\SOFTWARE\Classes\" & $aFileAsso[$i] & "\OpenWithProgids", $progid, "REG_NONE", "")
+	Next
+	RegisterContextMenu($BrowserPath, $ContextMenu)
+	SetStartWithWindows($StartWithWindows)
+
+	Local $cap = "HKCU\SOFTWARE\Clients\StartMenuInternet\" & $client
+	RegWrite($cap, "", "REG_SZ", $desc)
+	RegWrite($cap, "LocalizedString", "REG_SZ", $desc)
+	RegWrite($cap & "\DefaultIcon", "", "REG_SZ", $icon)
+	RegWrite($cap & "\shell\open\command", "", "REG_SZ", '"' & @ScriptFullPath & '"')
+	RegWrite($cap & "\InstallInfo", "IconsVisible", "REG_DWORD", 1)
+	RegWrite($cap & "\InstallInfo", "ReinstallCommand", "REG_SZ", '"' & @ScriptFullPath & '" -SetDefaultBrowser')
+	RegWrite($cap & "\InstallInfo", "HideIconsCommand", "REG_SZ", '"' & @ScriptFullPath & '" -SetDefaultBrowser')
+	RegWrite($cap & "\InstallInfo", "ShowIconsCommand", "REG_SZ", '"' & @ScriptFullPath & '" -SetDefaultBrowser')
+	RegWrite($cap & "\Capabilities", "ApplicationName", "REG_SZ", $desc)
+	RegWrite($cap & "\Capabilities", "ApplicationIcon", "REG_SZ", $icon)
+	RegWrite($cap & "\Capabilities", "ApplicationDescription", "REG_SZ", lang("GUI", "DefaultBrowserDesc", "MyChrome 便携版浏览器"))
+	For $i = 0 To UBound($aFileAsso) - 1
+		RegWrite($cap & "\Capabilities\FileAssociations", $aFileAsso[$i], "REG_SZ", $progid)
+	Next
+	For $i = 0 To UBound($aUrlAsso) - 1
+		RegWrite($cap & "\Capabilities\URLAssociations", $aUrlAsso[$i], "REG_SZ", $progid)
+	Next
+	RegWrite($cap & "\Capabilities\StartMenu", "StartMenuInternet", "REG_SZ", $client)
+	$RegWriteError += Not RegWrite("HKCU\SOFTWARE\RegisteredApplications", $client, "REG_SZ", "Software\Clients\StartMenuInternet\" & $client & "\Capabilities")
+
+	RegWrite("HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe", "", "REG_SZ", @ScriptFullPath)
+	RegWrite("HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe", "Path", "REG_SZ", @ScriptDir)
+
+	$ClientKey = $cap
+	$Progid = $progid
+	If Not $aREG[5][1] Then
+		$aREG[5][1] = $progid
+	EndIf
+	CreateMyChromeStartMenuShortcut($BrowserPath)
+	DllCall("shell32.dll", "none", "SHChangeNotify", "long", 0x08000000, "uint", 0, "ptr", 0, "ptr", 0)
+	Return SetError($RegWriteError, 0, $RegWriteError = 0)
+EndFunc   ;==>RegisterPortableBrowser
+
+Func CreateMyChromeStartMenuShortcut($BrowserPath)
+	Local $lnk = @AppDataDir & "\Microsoft\Windows\Start Menu\Programs\MyChrome.lnk"
+	Local $ShellObj = ObjCreate("WScript.Shell")
+	If @error Then Return
+	Local $objShortcut = $ShellObj.CreateShortCut($lnk)
+	$objShortcut.TargetPath = @ScriptFullPath
+	$objShortcut.WorkingDirectory = @ScriptDir
+	If FileExists($BrowserPath) Then
+		$objShortcut.IconLocation = $BrowserPath & ",0"
+	Else
+		$objShortcut.IconLocation = @ScriptFullPath & ",0"
+	EndIf
+	$objShortcut.Description = "MyChrome Portable"
+	$objShortcut.Save
+	_ShortcutAppId($lnk, $MyChromeAppId)
+EndFunc   ;==>CreateMyChromeStartMenuShortcut
+
 Func CheckDefaultBrowser($BrowserPath)
-	Local $InternetClient, $Key, $i, $j, $var, $RegWriteError = 0
-
+	Local $var, $RegWriteError = 0
 	If Not $ClientKey Then
-
-		If @OSArch = "X86" Then
-			Local $aRoot[2] = ["HKCU\SOFTWARE", $HKLM_Software_32]
-		Else
-			Local $aRoot[3] = ["HKCU\SOFTWARE", $HKLM_Software_32, $HKLM_Software_64]
-		EndIf
-		For $i = 0 To UBound($aRoot) - 1 ; search chrome in internetclient
-			$j = 1
-			While 1
-				$InternetClient = RegEnumKey($aRoot[$i] & "\Clients\StartMenuInternet", $j)
-				If @error <> 0 Then ExitLoop
-				$Key = $aRoot[$i] & '\Clients\StartMenuInternet\' & $InternetClient
-				$var = RegRead($Key & '\DefaultIcon', '')
-				If StringInStr($var, $BrowserPath) Then
-					$ClientKey = $Key
-					$Progid = RegRead($ClientKey & '\Capabilities\URLAssociations', 'http')
-					ExitLoop 2
-				EndIf
-				$j += 1
-			WEnd
-		Next
+		$ClientKey = "HKCU\SOFTWARE\Clients\StartMenuInternet\" & $MyChromeClientName
+		$Progid = $MyChromeProgid
 	EndIf
 	If $ClientKey Then
 		$var = RegRead($ClientKey & '\shell\open\command', '')
@@ -1044,34 +1157,23 @@ Func CheckDefaultBrowser($BrowserPath)
 	If Not $Progid Then
 		$Progid = FindChromeProgid($BrowserPath)
 	EndIf
+	If Not $Progid Then $Progid = $MyChromeProgid
 
 	If $Progid Then
-		$var = RegRead('HKCR\' & $Progid & '\shell\open\command', '')
+		$var = RegRead('HKCU\SOFTWARE\Classes\' & $Progid & '\shell\open\command', '')
 		If Not StringInStr($var, @ScriptFullPath) Then
-			RegWrite('HKCR\' & $Progid & '\shell\open\ddeexec', '', 'REG_SZ', '')
-			RegDelete('HKCR\' & $Progid & '\shell\open\command', 'DelegateExecute') ; fix Unregistered class error
-			$RegWriteError += Not RegWrite('HKCR\' & $Progid & '\shell\open\command', _
+			RegWrite('HKCU\SOFTWARE\Classes\' & $Progid & '\shell\open\ddeexec', '', 'REG_SZ', '')
+			RegDelete('HKCU\SOFTWARE\Classes\' & $Progid & '\shell\open\command', 'DelegateExecute')
+			$RegWriteError += Not RegWrite('HKCU\SOFTWARE\Classes\' & $Progid & '\shell\open\command', _
 					'', 'REG_SZ', '"' & @ScriptFullPath & '" -- "%1"')
 		EndIf
 		If Not $aREG[5][1] Then
 			$aREG[5][1] = $Progid ; for reg notification
-			$aREG[5][2] = _WinAPI_RegOpenKey($aREG[5][0], $aREG[5][1], $KEY_NOTIFY)
-		EndIf
-	EndIf
-
-	Local $aAsso[3] = ['ftp', 'http', 'https']
-	For $i = 0 To 2
-		$var = RegRead('HKCR\' & $aAsso[$i] & '\DefaultIcon', '')
-		If StringInStr($var, $BrowserPath) Then
-			$var = RegRead('HKCR\' & $aAsso[$i] & '\shell\open\command', '')
-			If Not StringInStr($var, @ScriptFullPath) Then
-				RegWrite('HKCR\' & $aAsso[$i] & '\shell\open\ddeexec', '', 'REG_SZ', '')
-				RegDelete('HKCR\' & $aAsso[$i] & '\shell\open\command', 'DelegateExecute')
-				$RegWriteError += Not RegWrite('HKCR\' & $aAsso[$i] & '\shell\open\command', _
-						'', 'REG_SZ', '"' & @ScriptFullPath & '" -- "%1"')
+			If $hEvent_Reg Then
+				$aREG[5][2] = _WinAPI_RegOpenKey($aREG[5][0], $aREG[5][1], $KEY_NOTIFY)
 			EndIf
 		EndIf
-	Next
+	EndIf
 
 	If IsAdmin() Then
 		RegRead('HKLM64\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe', '')
@@ -1089,6 +1191,7 @@ Func CheckDefaultBrowser($BrowserPath)
 		EndIf
 	EndIf
 EndFunc   ;==>CheckDefaultBrowser
+
 Func FindChromeProgid($BrowserPath)
 	Local $i, $id, $var
 	RegRead('HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts', '')
@@ -1097,7 +1200,7 @@ Func FindChromeProgid($BrowserPath)
 			$id = RegRead('HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\' & $aFileAsso[$i] & '\UserChoice', 'Progid')
 			If $id Then
 				$var = RegRead('HKCR\' & $id & '\DefaultIcon', '')
-				If StringInStr($var, $BrowserPath) Then
+				If StringInStr($var, $BrowserPath) Or StringInStr($var, @ScriptFullPath) Then
 					Return $id
 				EndIf
 			EndIf
@@ -1107,7 +1210,7 @@ Func FindChromeProgid($BrowserPath)
 	For $i = 0 To UBound($aFileAsso) - 1
 		$id = RegRead('HKCR\' & $aFileAsso[$i], '')
 		$var = RegRead('HKCR\' & $id & '\DefaultIcon', '')
-		If StringInStr($var, $BrowserPath) Then
+		If StringInStr($var, $BrowserPath) Or StringInStr($var, @ScriptFullPath) Then
 			Return $id
 		EndIf
 	Next
@@ -1118,7 +1221,7 @@ Func FindChromeProgid($BrowserPath)
 			$id = RegRead('HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\' & $aUrlAsso[$i] & '\UserChoice', 'Progid')
 			If $id Then
 				$var = RegRead('HKCR\' & $id & '\DefaultIcon', '')
-				If StringInStr($var, $BrowserPath) Then
+				If StringInStr($var, $BrowserPath) Or StringInStr($var, @ScriptFullPath) Then
 					Return $id
 				EndIf
 			EndIf
@@ -1126,6 +1229,117 @@ Func FindChromeProgid($BrowserPath)
 	EndIf
 	Return ""
 EndFunc   ;==>FindChromeProgid
+
+Func IsMyChromeDefaultBrowser()
+	Local $id = RegRead('HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice', 'Progid')
+	If $id = $MyChromeProgid Then Return True
+	If $id Then
+		Local $var = RegRead('HKCR\' & $id & '\shell\open\command', '')
+		If StringInStr($var, @ScriptFullPath) Then Return True
+	EndIf
+	Return False
+EndFunc   ;==>IsMyChromeDefaultBrowser
+
+Func SetAsDefaultBrowser($BrowserPath, $Silent = False)
+	RegisterPortableBrowser($BrowserPath)
+	CheckDefaultBrowser($BrowserPath)
+	If VersionCompare($WinVersion, "10.0.22000") >= 0 Then
+		ShellExecute("ms-settings:defaultapps?registeredAppUser=" & $MyChromeClientName)
+		If Not $Silent Then
+			MsgBox(64, "MyChrome", lang("GUI", "SetDefaultBrowserTips", _
+					"已在系统中注册便携版浏览器。" & @CRLF & "请在打开的 Windows 设置中选择 MyChrome Portable，并点击“设为默认值”。"))
+		EndIf
+	ElseIf VersionCompare($WinVersion, "10.0") >= 0 Then
+		If Not LaunchAssociationUI($MyChromeClientName) Then
+			ShellExecute("ms-settings:defaultapps")
+		EndIf
+		If Not $Silent Then
+			MsgBox(64, "MyChrome", lang("GUI", "SetDefaultBrowserTips", _
+					"已在系统中注册便携版浏览器。" & @CRLF & "请在打开的 Windows 设置中选择 MyChrome Portable，并设为默认浏览器。"))
+		EndIf
+	ElseIf VersionCompare($WinVersion, "6.2") >= 0 Then
+		LaunchAssociationUI($MyChromeClientName)
+		If Not $Silent Then
+			MsgBox(64, "MyChrome", lang("GUI", "SetDefaultBrowserTipsWin8", _
+					"请在打开的窗口中将 MyChrome 设为默认浏览器。"))
+		EndIf
+	Else
+		RegWrite("HKCU\Software\Clients\StartMenuInternet", "", "REG_SZ", $MyChromeClientName)
+		If Not $Silent Then
+			MsgBox(64, "MyChrome", lang("GUI", "SetDefaultBrowserDone", "已尝试将 MyChrome 设为默认浏览器。"))
+		EndIf
+	EndIf
+EndFunc   ;==>SetAsDefaultBrowser
+
+Func LaunchAssociationUI($appName)
+	Local $tCLSID = _WinAPI_GUIDFromString("{1968106D-F3B5-44CF-890E-116FCB9ECEF1}")
+	Local $tIID = _WinAPI_GUIDFromString("{1F7DBD1A-73C7-4BE5-8324-26130FB7FE7E}")
+	Local $aRet = DllCall("ole32.dll", "long", "CoCreateInstance", "struct*", $tCLSID, "ptr", 0, "dword", 1, "struct*", $tIID, "ptr*", 0)
+	If @error Or $aRet[0] <> 0 Or Not $aRet[5] Then Return SetError(1, 0, 0)
+	Local $oUI = ObjCreateInterface($aRet[5], "{1F7DBD1A-73C7-4BE5-8324-26130FB7FE7E}", "LaunchAdvancedAssociationUI hresult(wstr);")
+	If Not IsObj($oUI) Then Return SetError(2, 0, 0)
+	$oUI.LaunchAdvancedAssociationUI($appName)
+	Return 1
+EndFunc   ;==>LaunchAssociationUI
+
+Func GUI_SetDefaultBrowser()
+	Local $path = FullPath(GUICtrlRead($hChromePath))
+	If Not FileExists($path) Then $path = $ChromePath
+	SetAsDefaultBrowser($path, False)
+EndFunc   ;==>GUI_SetDefaultBrowser
+
+Func GetRealWinVersion()
+	Local $s = _WinAPI_GetVersion()
+	Local $t = DllStructCreate("dword OSVersionInfoSize;dword MajorVersion;dword MinorVersion;dword BuildNumber;dword PlatformId;wchar CSDVersion[128]")
+	DllStructSetData($t, "OSVersionInfoSize", DllStructGetSize($t))
+	Local $aRet = DllCall("ntdll.dll", "int", "RtlGetVersion", "struct*", $t)
+	If Not @error And $aRet[0] = 0 Then
+		$s = DllStructGetData($t, "MajorVersion") & "." & DllStructGetData($t, "MinorVersion") & "." & DllStructGetData($t, "BuildNumber")
+	EndIf
+	Return $s
+EndFunc   ;==>GetRealWinVersion
+
+Func EnableWinHttpTls12($hHTTPOpen)
+	If Not $hHTTPOpen Then Return
+	Local Const $WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 = 0x00000800
+	Local Const $WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 = 0x00000200
+	_WinHttpSetOption($hHTTPOpen, $WINHTTP_OPTION_SECURE_PROTOCOLS, BitOR($WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1, $WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2))
+EndFunc   ;==>EnableWinHttpTls12
+
+Func ApplyDarkTitleBar($hWnd)
+	If Not $hWnd Then Return
+	If VersionCompare($WinVersion, "10.0") < 0 Then Return
+	Local $appsUseLight = Number(RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme"))
+	If $appsUseLight = 1 Then Return
+	Local $useDark = 1
+	DllCall("dwmapi.dll", "long", "DwmSetWindowAttribute", "hwnd", $hWnd, "dword", 20, "dword*", $useDark, "dword", 4)
+	DllCall("dwmapi.dll", "long", "DwmSetWindowAttribute", "hwnd", $hWnd, "dword", 19, "dword*", $useDark, "dword", 4)
+	DllCall("uxtheme.dll", "none", "SetPreferredAppMode", "int", 2)
+EndFunc   ;==>ApplyDarkTitleBar
+
+Func RegisterContextMenu($BrowserPath, $enable)
+	Local $menu = "HKCU\SOFTWARE\Classes\*\shell\MyChrome"
+	If Not $enable Then
+		RegDelete($menu)
+		RegDelete("HKCU\SOFTWARE\Classes\Directory\shell\MyChrome")
+		Return
+	EndIf
+	Local $icon = $BrowserPath & ",0"
+	If Not FileExists($BrowserPath) Then $icon = @ScriptFullPath & ",0"
+	Local $text = lang("GUI", "OpenWithMyChrome", "用 MyChrome 打开")
+	RegWrite($menu, "", "REG_SZ", $text)
+	RegWrite($menu, "Icon", "REG_SZ", $icon)
+	RegWrite($menu & "\command", "", "REG_SZ", '"' & @ScriptFullPath & '" -- "%1"')
+EndFunc   ;==>RegisterContextMenu
+
+Func SetStartWithWindows($enable)
+	Local $key = "HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+	If $enable Then
+		RegWrite($key, "MyChrome", "REG_SZ", '"' & @ScriptFullPath & '"')
+	Else
+		RegDelete($key, "MyChrome")
+	EndIf
+EndFunc   ;==>SetStartWithWindows
 
 
 ;~ check MyChrome update
@@ -1276,7 +1490,7 @@ Func Settings()
 	$ChromeLastChange = GetChromeLastChange($ChromeDir & "\chrome.dll")
 
 	Opt("ExpandEnvStrings", 0)
-	$hSettings = GUICreate(lang("GUI", "Title", 'MyChrome - 打造自己的 Google Chrome 便携版'), 500, 530)
+	$hSettings = GUICreate(lang("GUI", "Title", 'MyChrome - 打造自己的 Google Chrome 便携版'), 500, 560)
 	GUISetOnEvent($GUI_EVENT_CLOSE, "ExitApp")
 	Local $LangCopyright = lang("GUI", "Copyright", 'MyChrome %s by 甲壳虫 <jdchenjian@gmail.com>')
 	$LangCopyright = StringFormat($LangCopyright, $AppVersion)
@@ -1287,12 +1501,13 @@ Func Settings()
 	GUICtrlSetOnEvent(-1, "OpenWebsite")
 
 	;Tab General
-	GUICtrlCreateTab(5, 35, 492, 430)
+	GUICtrlCreateTab(5, 35, 492, 460)
 	GUICtrlCreateTabItem(lang("GUI", "TabGeneral", '常规'))
 
 	GUICtrlCreateGroup(lang("GUI", "GroupChromeApp", 'Google Chrome 程序文件'), 10, 80, 480, 190)
 	GUICtrlCreateLabel(lang("GUI", "ChromePath", 'Chrome 路径：'), 20, 110, 120, 20)
-	$hChromePath = GUICtrlCreateEdit($ChromePath, 130, 106, 290, 20, $ES_AUTOHSCROLL)
+	$hChromePath = GUICtrlCreateInput($ChromePath, 130, 106, 290, 22)
+	GUICtrlSetData($hChromePath, $ChromePath)
 
 	$hGetChromePath = GUICtrlCreateButton(lang("GUI", "Browse", '浏览'), 430, 106, 50, 20)
 	GUICtrlSetOnEvent(-1, "GUI_GetChromePath")
@@ -1336,7 +1551,8 @@ Func Settings()
 
 	GUICtrlCreateGroup(lang("GUI", "ChromeUserData", 'Google Chrome 用户数据文件'), 10, 290, 480, 80)
 	GUICtrlCreateLabel(lang("GUI", "UserDataDir", '用户数据文件夹：'), 20, 320, 110, 20)
-	$hUserDataDir = GUICtrlCreateEdit($UserDataDir, 130, 315, 290, 20, $ES_AUTOHSCROLL)
+	$hUserDataDir = GUICtrlCreateInput($UserDataDir, 130, 315, 290, 22)
+	GUICtrlSetData($hUserDataDir, $UserDataDir)
 	GUICtrlCreateButton(lang("GUI", "Browse", '浏览'), 430, 315, 50, 20)
 	GUICtrlSetOnEvent(-1, "GUI_GetUserDataDir")
 	$hCopyData = GUICtrlCreateCheckbox(lang("GUI", "CopyDataFromeSys", '从系统中提取用户数据文件'), 20, 340, -1, 20)
@@ -1375,18 +1591,27 @@ Func Settings()
 	If $RunInBackground Then
 		GUICtrlSetState($hRunInBackground, $GUI_CHECKED)
 	EndIf
+	$hSetDefaultBrowser = GUICtrlCreateButton(lang("GUI", "SetDefaultBrowser", '设为默认浏览器'), 20, 468, 150, 22)
+	GUICtrlSetTip(-1, lang("GUI", "SetDefaultBrowserTip", '在系统中注册便携版，并打开 Windows 设置完成默认浏览器授权'))
+	GUICtrlSetOnEvent(-1, "GUI_SetDefaultBrowser")
+	$hContextMenu = GUICtrlCreateCheckbox(lang("GUI", "ContextMenu", '资源管理器右键菜单'), 180, 468, 160, 22)
+	If $ContextMenu Then GUICtrlSetState($hContextMenu, $GUI_CHECKED)
+	$hStartWithWindows = GUICtrlCreateCheckbox(lang("GUI", "StartWithWindows", '开机启动'), 350, 468, 120, 22)
+	If $StartWithWindows Then GUICtrlSetState($hStartWithWindows, $GUI_CHECKED)
 
 	; Advanced
 	GUICtrlCreateTabItem(lang("GUI", "TabAdvanced", '高级'))
 	GUICtrlCreateGroup(lang("GUI", "ChromeCache", 'Google Chrome 缓存'), 10, 80, 480, 90)
 	GUICtrlCreateLabel(lang("GUI", "CacheDir", '缓存位置：'), 20, 110, 100, 20)
-	$hCacheDir = GUICtrlCreateEdit($CacheDir, 120, 106, 300, 20, $ES_AUTOHSCROLL)
+	$hCacheDir = GUICtrlCreateInput($CacheDir, 120, 106, 300, 22)
+	GUICtrlSetData($hCacheDir, $CacheDir)
 	Local $LangCacheTips = lang("GUI", "ChromeCacheTips", '浏览器缓存位置\n空白 = 默认路径\n支持%TEMP%等环境变量')
 	GUICtrlSetTip(-1, StringFormat($LangCacheTips, 0))
 	$hSelectCacheDir = GUICtrlCreateButton(lang("GUI", "Browse", '浏览'), 430, 106, 50, 20)
 	GUICtrlSetOnEvent(-1, "GUI_SelectCacheDir")
 	GUICtrlCreateLabel(lang("GUI", "CacheSize", '缓存大小：'), 20, 140, 100, 20)
-	$hCacheSize = GUICtrlCreateEdit(Round($CacheSize / 1024 / 1024), 120, 136, 80, 20, $ES_AUTOHSCROLL)
+	$hCacheSize = GUICtrlCreateInput(Round($CacheSize / 1024 / 1024), 120, 136, 80, 22, $ES_NUMBER)
+	GUICtrlSetData($hCacheSize, Round($CacheSize / 1024 / 1024))
 	Local $LangCacheSizeTips = lang("GUI", "ChromeCacheSizeTips", '缓存大小\n0 = 默认')
 	GUICtrlSetTip(-1, StringFormat($LangCacheSizeTips, 0))
 	GUICtrlCreateLabel(" MB", 200, 140, 40, 20)
@@ -1547,12 +1772,12 @@ Func Settings()
 	EndIf
 
 	GUICtrlCreateTabItem("")
-	$hSettingsOK = GUICtrlCreateButton(lang("GUI", "OK", '确定'), 260, 480, 70, 20)
+	$hSettingsOK = GUICtrlCreateButton(lang("GUI", "OK", '确定'), 260, 510, 70, 20)
 	GUICtrlSetOnEvent(-1, "GUI_SettingsOK")
 	GUICtrlSetState(-1, $GUI_FOCUS)
-	GUICtrlCreateButton(lang("GUI", "Cancel", '取消'), 340, 480, 70, 20)
+	GUICtrlCreateButton(lang("GUI", "Cancel", '取消'), 340, 510, 70, 20)
 	GUICtrlSetOnEvent(-1, "ExitApp")
-	$hSettingsApply = GUICtrlCreateButton(lang("GUI", "Apply", '应用'), 420, 480, 70, 20)
+	$hSettingsApply = GUICtrlCreateButton(lang("GUI", "Apply", '应用'), 420, 510, 70, 20)
 	GUICtrlSetOnEvent(-1, "GUI_SettingsApply")
 	$LangSettingsTips = StringFormat(lang("GUI", "SettingsTips", '双击软件目录下的 "%s.vbs" 文件可显示此窗口'), $AppName)
 	$hStausbar = _GUICtrlStatusBar_Create($hSettings, -1, $LangSettingsTips)
@@ -1985,12 +2210,27 @@ Func GUI_SettingsApply()
 		$KeepLastTab = 0
 	EndIf
 
+	If GUICtrlRead($hContextMenu) = $GUI_CHECKED Then
+		$ContextMenu = 1
+	Else
+		$ContextMenu = 0
+	EndIf
+	If GUICtrlRead($hStartWithWindows) = $GUI_CHECKED Then
+		$StartWithWindows = 1
+	Else
+		$StartWithWindows = 0
+	EndIf
+
 	IniWrite($inifile, "Settings", "Bosskey", $Bosskey)
 	IniWrite($inifile, "Settings", "BosskeyM", $BosskeyM)
 	IniWrite($inifile, "Settings", "Hide2Tray", $Hide2Tray)
 	IniWrite($inifile, "Settings", "MouseClick2CloseTab", $MouseClick2CloseTab)
 	IniWrite($inifile, "Settings", "Mouse2SwitchTab", $Mouse2SwitchTab)
 	IniWrite($inifile, "Settings", "KeepLastTab", $KeepLastTab)
+	IniWrite($inifile, "Settings", "ContextMenu", $ContextMenu)
+	IniWrite($inifile, "Settings", "StartWithWindows", $StartWithWindows)
+	RegisterContextMenu(FullPath($ChromePath), $ContextMenu)
+	SetStartWithWindows($StartWithWindows)
 
 	SplitPath($ChromePath, $ChromeDir, $ChromeExe)
 	Opt("ExpandEnvStrings", 1)
@@ -2571,6 +2811,7 @@ Func get_latest_chrome_ver_sina($Channel, $x86 = 0, $inifile = "", $Proxy = "")
 	Else
 		$hHTTPOpen = _WinHttpOpen($UserAgent, $WINHTTP_ACCESS_TYPE_NAMED_PROXY, $sProxy, "localhost")
 	EndIf
+	EnableWinHttpTls12($hHTTPOpen)
 	_WinHttpSetTimeouts($hHTTPOpen, 0, 3000, 3000, 3000)
 
 	$LangGetChromeChances = lang("Update", "GetChromeChances", '从服务器获取 %s 更新信息... 第 %d 次尝试')
@@ -2638,6 +2879,7 @@ Func get_latest_chrome_ver($Channel, $x86 = 0, $inifile = "MyChrome.ini", $Proxy
 	Else
 		$hHTTPOpen = _WinHttpOpen($UserAgent, $WINHTTP_ACCESS_TYPE_NAMED_PROXY, $sProxy, "localhost")
 	EndIf
+	EnableWinHttpTls12($hHTTPOpen)
 	_WinHttpSetTimeouts($hHTTPOpen, 0, 3000, 3000, 3000)
 
 	$LangGetChromeChances = lang("Update", "GetChromeChances", '从服务器获取 %s 更新信息... 第 %d 次尝试')
@@ -2648,7 +2890,11 @@ Func get_latest_chrome_ver($Channel, $x86 = 0, $inifile = "MyChrome.ini", $Proxy
 	; get latest Chromium developer build
 	If StringInStr($Channel, "Chromium") Then
 		$host = $http & "://storage.googleapis.com"
-		$urlbase = "chromium-browser-snapshots/Win"
+		If $x86 Or $OSArch = "x86" Then
+			$urlbase = "chromium-browser-snapshots/Win"
+		Else
+			$urlbase = "chromium-browser-snapshots/Win_x64"
+		EndIf
 
 		For $i = 1 To 3
 			_SetVar("DLInfo", '|||||' & StringFormat($LangGetChromeChances, "Chromium", $i))
@@ -2686,10 +2932,10 @@ Func get_latest_chrome_ver($Channel, $x86 = 0, $inifile = "MyChrome.ini", $Proxy
 		Case "Stable"
 			$appid = "8A69D345-D564-463C-AFF1-A69D9E530F96"
 			If $need_x86 Then
-				$ap = ""
+				$ap = "-statsdef_1"
 				$OSArch = "x86"
 			Else
-				$ap = "x64-stable-multi-chrome"
+				$ap = "x64-stable-statsdef_1"
 			EndIf
 		Case "Beta"
 			$appid = "8A69D345-D564-463C-AFF1-A69D9E530F96"
@@ -2697,7 +2943,7 @@ Func get_latest_chrome_ver($Channel, $x86 = 0, $inifile = "MyChrome.ini", $Proxy
 				$ap = "1.1-beta"
 				$OSArch = "x86"
 			Else
-				$ap = "x64-beta-multi-chrome"
+				$ap = "x64-beta-statsdef_1"
 			EndIf
 		Case "Dev"
 			$appid = "8A69D345-D564-463C-AFF1-A69D9E530F96"
@@ -2812,6 +3058,7 @@ Func download_chrome($urls, $localfile, $DownloadThreads = 3, $inifile = "MyChro
 	Else
 		$hHTTPOpen = _WinHttpOpen($UserAgent, $WINHTTP_ACCESS_TYPE_NAMED_PROXY, $ProxySever & ":" & $ProxyPort, "localhost")
 	EndIf
+	EnableWinHttpTls12($hHTTPOpen)
 	_WinHttpSetTimeouts($hHTTPOpen, 0, 5000, 5000, 5000) ; 设置超时
 
 

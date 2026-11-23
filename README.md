@@ -21,8 +21,14 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 ## 最近更新
- **2017.03.12 v3.8.1**
-修正 Stable/Beta/Dev/Canary 分支的更新问题
+  **2026.11.23 v3.9.2**
+适配 Windows 10 / 11 默认浏览器机制：
+1. 按系统要求完整注册便携版（ProgID、Capabilities、RegisteredApplications）。
+2. 设置界面新增「设为默认浏览器」，Win11 会打开系统设置完成授权。
+3. 固定 AppUserModelID，改善任务栏钉住与窗口分组。
+4. 更新 Omaha 通道参数、Chromium x64 快照源，并启用 WinHTTP TLS 1.2。
+5. 支持资源管理器右键“用 MyChrome 打开”、开机启动、PDF 关联。
+6. 设置窗口跟随系统深色标题栏，并启用每显示器 DPI。
 
 [更新历史](https://github.com/cnjackchen/my-chrome/wiki/History)
 
